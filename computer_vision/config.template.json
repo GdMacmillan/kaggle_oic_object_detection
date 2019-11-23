@@ -1,0 +1,12 @@
+{
+  "project": "",
+  "credentials": "GOOGLE_APPLICATION_CREDENTIALS",
+  "test_read_annotations": {
+    "readBucket": ""
+    "inputFile": ""
+  },
+  "convert_annotations": {
+    "readBucket": "",
+    "writeBucket": ""
+  }
+}

@@ -1,0 +1,11 @@
+gcloud beta dataproc clusters create platform-1 \
+    --master-machine-type custom-2-13312 \
+    --worker-machine-type custom-2-13312 \
+    --optional-components=ANACONDA,JUPYTER \
+    --image-version preview \
+    --metadata 'CONDA_PACKAGES=scipy=1.1.0 tensorflow' \
+    --metadata 'PIP_PACKAGES=pandas==0.23.0 scipy==1.1.0' \
+    --initialization-actions gs://dataproc-initialization-actions/python/conda-install.sh,gs://dataproc-initialization-actions/python/pip-install.sh \
+    --enable-component-gateway \
+    --bucket train-bucket3fc7db0a-d2aa-11e9-9747-0242ac1c0002 \
+    --project open-images-challenge-252402

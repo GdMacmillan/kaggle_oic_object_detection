@@ -1,0 +1,31 @@
+import os
+import gcsfs
+import pandas as pd
+import time
+import json
+
+file_name = os.path.basename(__file__).split('.')[0]
+
+with open('config.json', 'r') as f:
+    data = json.load(f)
+    PROJECT = data['project']
+    CREDENTIALS = os.environ[data['credentials']]
+    read_bucket_name = data[file_name]['readBucket']
+    input_file_name = data[file_name]['inputFile']
+
+FILE_PATH = os.path.join('gs/', read_bucket_name, input_file_name)
+
+start = time.time()
+
+# create filesystem object to handle our credentials
+fs = gcsfs.GCSFileSystem(project=PROJECT,
+                         token=CREDENTIALS)
+
+# read with pandas
+with fs.open(FILE_PATH) as f:
+    reader = pd.read_csv(f, chunksize=100000)
+    df = pd.concat([chunk for chunk in reader])
+    print("Num rows: ", df.shape[0])
+end = time.time()
+
+print("Wall time: ", (end - start))

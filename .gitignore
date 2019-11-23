@@ -1,0 +1,6 @@
+config.json
+coco
+data/*
+.ipynb_checkpoints
+notes.md
+hub-config.yaml
