@@ -14,7 +14,7 @@ if __name__ == '__main__':
         read_bucket_name = data[file_name]['readBucket']
         input_file_name = data[file_name]['inputFile']
 
-    FILE_PATH = os.path.join('gs/', read_bucket_name, input_file_name)
+    FILE_PATH = os.path.join('gs:/', read_bucket_name, input_file_name)
 
     start = time.time()
 
