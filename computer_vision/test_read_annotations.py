@@ -7,7 +7,7 @@ import json
 file_name = os.path.basename(__file__).split('.')[0]
 
 if __name__ == '__main__':
-    with open('config.json', 'r') as f:
+    with open('/data/config.json', 'r') as f:
         data = json.load(f)
         PROJECT = data['project']
         CREDENTIALS = os.environ[data['credentials']]
