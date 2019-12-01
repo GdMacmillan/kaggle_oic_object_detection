@@ -92,7 +92,7 @@ def main():
         # submit tasks
         for task in img_fps: # TASKS1
             task_queue.put(task)
-        # start worker processes
+        print('starting worker processes')
         for i in range(pool_size):
             multiprocessing.Process(target=worker, args=(task_queue, done_queue)).start()
 
