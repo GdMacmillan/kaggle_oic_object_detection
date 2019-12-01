@@ -1,43 +1,67 @@
 
 from PIL import Image
-from pymongo import MongoClient
+# from pymongo import MongoClient
 from collections import defaultdict
+from tempfile import NamedTemporaryFile
 from pathlib import Path
-import shutil
+import dask.dataframe as dd
+import pandas as pd
+import numpy as np
 import multiprocessing
-import threading
+import gcsfs
 import os
+import io
 import json
 import time
 
+file_name = os.path.basename(__file__).split('.')[0]
 
-POOL_SIZE = multiprocessing.cpu_count()
-PROJECT = ""
+pool_size = multiprocessing.cpu_count()
+manager = multiprocessing.Manager()
 
-annotation_fields = ['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id']
+fields = ['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id']
 
+def worker(input, output):
+    for func, args, df, groups in iter(input.get, 'STOP'):
+        result = convert_annotations(func, args, df, groups)
+        output.put(result)
 
-DB_NAME = ""
-COLLECTION_NAME = ""
+def convert_annotations(func, args, df, groups):
+    width, height = func(*args)
+    filepath = Path(args[1])
+    image = {
+        "file_name": filepath.name,
+        "height": height,
+        "width": width,
+        "id": filepath.stem,
+    }
+    anno = df.loc[groups[filepath.stem]]
+    anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
+    anno['iscrowd'] = anno.IsGroupOf
+    anno['category_id'] = anno.LabelName
+    anno['image_id'] = anno.ImageID
+    anno['id'] = anno.key_0
+    anno['segmentation'] = np.empty((len(anno), 0)).tolist()
+    annotations = anno[fields].to_dict('records')
 
-client = MongoClient()
-db = client[DB_NAME]
-coll = db[COLLECTION_NAME]
+    return image, annotations
+    # return '%s is processing image: %s' % \
+    #     (multiprocessing.current_process().name, image)
 
-
-def get_im_size(fp):
+def get_im_size(fs, fp):
     """
     input - filepath or path object
     output - width, height
     """
-    with Image.open(fp, 'r') as img:
+    with fs.open(fp, 'rb') as f:
+        img = Image.open(io.BytesIO(f.read()))
         return img.size
 
 def calc_bounding_box(row, im_width, im_height):
     """
     input - row with bounding box corner x min/max and y min/max
             image width in num pixels, height in num pixels
-    output - x, y, width and height of bounding box in num pixels
+    output x, y, width and height of bounding box in num pixels
             area of bounding box in pixels
     """
     x, y = int(row['XMin'] * im_width), int(row['YMin'] * im_height)
@@ -47,55 +71,71 @@ def calc_bounding_box(row, im_width, im_height):
 
     return pd.Series({'bbox':[x, y, width, height], 'area': area})
 
+def main():
+    start = time.time()
 
-def class AnnotationConverter(object):
+    output_dict = defaultdict(list)
+    with NamedTemporaryFile('w') as out:
+        with open('/data/config.json', 'r') as f: # uncomment for container runtime
+        # with open('computer_vision/config.json', 'r') as f:
+            data = json.load(f) # uncomment for container runtime
+            project = data['project']
+            credentials = os.environ[data['credentials']]
+            read_bucket_name = data[file_name]['readBucket']
+            input_file_name = data[file_name]['inputFile']
+            output_file_name = data[file_name]['outputFile']
+            labels_file_name = data[file_name]['labelsFile']
+        print('read config complete')
+        imgs_path = Path(read_bucket_name)
+        annotations_fp = os.path.join(read_bucket_name, input_file_name)
+        labels_fp = os.path.join(read_bucket_name, labels_file_name)
+        # create filesystem object to handle our credentials
+        fs = gcsfs.GCSFileSystem(project=project,
+                                 token=credentials)
 
-    def get_img_fps_iter(self):
-        return list((self.IMG_dir_path).glob('*.jpg'))
+        with fs.open(annotations_fp) as f:
+            reader = pd.read_csv(f, chunksize=100000)
+            df = pd.concat([chunk for chunk in reader])
+        print('read annotations complete')
+        groups = df.groupby('ImageID').groups # groups of indexes
+        print('number of annotation groups found: ', len(groups.keys()))
+        img_fps = [(get_im_size, (fs, fp), df, groups) for fp in fs.glob(str(imgs_path/'*.jpg'))]
+        # create queues
+        task_queue = multiprocessing.Queue()
+        done_queue = multiprocessing.Queue()
+        # submit tasks
+        for task in img_fps: # TASKS1
+            task_queue.put(task)
+        # start worker processes
+        for i in range(pool_size):
+            multiprocessing.Process(target=worker, args=(task_queue, done_queue)).start()
+        # get results
+        print('unordered results:')
+        for i in range(len(img_fps)):
+            # print('\t', done_queue.get())
+            image, annotations = done_queue.get()
+            output_dict['images'].append(image)
+            output_dict['annotations'].extend(annotations)
+        # Tell child processes to stop
+        for i in range(pool_size):
+            task_queue.put('STOP')
 
-    def convert_annotations(self, img_fps):
-        opt = defaultdict(list)
-
-        for fp in img_fps:
-            width, height = get_im_size(fp)
-            image = {
-                "file_name": fp.name,
-                "height": height,
-                "width": width,
-                "id": fp.stem,
-            }
-            opt['images'].append(image)
-
-            # convert annotations
-            anno = self.df.loc[groups[fp.stem]]
-            anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
-            anno['iscrowd'] = anno.IsGroupOf
-            anno['category_id'] = anno.LabelName
-            anno['image_id'] = anno.ImageID
-            anno['id'] = anno.key_0
-            anno['segmentation'] = np.empty((len(anno), 0)).tolist()
-
-            opt['annotations'].extend(
-                anno[annotation_fields].to_dict('records')
-            )
-
+        with fs.open(labels_fp) as f:
+            labels = pd.read_csv(f)
         labels['supercategory'] = labels.Class
         labels['name'] = labels.Class
         labels['id'] = labels.index
 
-        opt['categories'].extend(labels.to_dict('records'))
+        output_dict['categories'].extend(labels.to_dict('records'))
 
-        return opt
+        json.dump(output_dict, out)
+        out.flush()
 
-    def main(self):
-        # TODO: check that generator is compatible with multiprocessing change iterator if necessary
-        pool = multiprocessing.Pool(processes=POOL_SIZE)
-        rslt = pool.map(func=self.convert_annotations, self.get_img_fps_iter())
-        for d in rslt:
-            for k, v in d.items():
-                z[k].extend(v)
+    # send(out.name)
+    end = time.time()
 
+    print("Wall time: ", (end - start))
 
 if __name__ == '__main__':
-    converter = AnnotationConverter()
-    converter.main()
+    multiprocessing.freeze_support()
+    main()
