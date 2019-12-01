@@ -17,6 +17,7 @@ import time
 file_name = os.path.basename(__file__).split('.')[0]
 
 pool_size = multiprocessing.cpu_count()
+print("num cpus: ", pool_size)
 manager = multiprocessing.Manager()
 
 fields = ['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id']
@@ -67,8 +68,8 @@ def main():
 
     output_dict = defaultdict(list)
     with NamedTemporaryFile('w') as out:
-        with open('/data/config.json', 'r') as f: # uncomment for container runtime
-        # with open('computer_vision/config.json', 'r') as f:
+        # with open('/data/config.json', 'r') as f: # uncomment for container runtime
+        with open('computer_vision/config.json', 'r') as f:
             data = json.load(f) # uncomment for container runtime
             project = data['project']
             credentials = os.environ[data['credentials']]
