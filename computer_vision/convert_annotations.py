@@ -92,10 +92,10 @@ def main():
         # submit tasks
         for task in img_fps: # TASKS1
             task_queue.put(task)
-        print('starting worker processes')
+
         for i in range(pool_size):
             multiprocessing.Process(target=worker, args=(task_queue, done_queue)).start()
-
+        print('starting worker processes complete')
         # # read annotations into dask distributed dataframe
         # with fs.open(annotations_fp) as f:
         #     ddf = dd.read_csv(f, storage_options={'token': fs.session.credentials}, blocksize=25e6)
