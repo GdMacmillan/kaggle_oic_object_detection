@@ -24,9 +24,10 @@ if __name__ == '__main__':
 
     # read with pandas
     with fs.open(FILE_PATH) as f:
-        reader = pd.read_csv(f, chunksize=100000)
-        df = pd.concat([chunk for chunk in reader])
-        print("Num rows: ", df.shape[0])
+        # reader = pd.read_csv(f, chunksize=100000)
+        # df = pd.concat([chunk for chunk in reader])
+        df = dd.read_csv(f, storage_options={'token': fs.session.credentials}, blocksize=25e6)
+        print("Num rows: ", df.compute().shape[0])
     end = time.time()
 
     print("Wall time: ", (end - start))
