@@ -24,11 +24,12 @@ if __name__ == '__main__':
                              token=CREDENTIALS)
 
     # read with pandas
-    with fs.open(FILE_PATH) as f:
+    # with fs.open(FILE_PATH) as f:
         # reader = pd.read_csv(f, chunksize=100000)
         # df = pd.concat([chunk for chunk in reader])
-        df = dd.read_csv(f, storage_options={'token': fs.session.credentials}, blocksize=25e6)
-        print("Num rows: ", df.compute().shape[0])
+    FILE_PATH = 'gcs://' + FILE_PATH
+    df = dd.read_csv(, storage_options={'token': fs.session.credentials}, blocksize=25e6)
+    print("Num rows: ", df.compute().shape[0])
     end = time.time()
 
     print("Wall time: ", (end - start))
