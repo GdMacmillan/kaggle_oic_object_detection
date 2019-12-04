@@ -8,7 +8,7 @@ import dask.dataframe as dd
 import pandas as pd
 import numpy as np
 import multiprocessing
-from gcsfs import GCSFileSystem as fs
+import gcsfs
 import os
 import io
 import json
@@ -83,8 +83,10 @@ def main():
         annotations_fp = os.path.join(read_bucket_name, input_file_name)
         labels_fp = os.path.join(read_bucket_name, labels_file_name)
         # create filesystem object to handle our credentials
-        fs_args = dict(project=project, token=credentials)
-        img_fps = [(get_im_size, (fs(**fs_args), fp)) for fp in fs(**fs_args).glob(str(imgs_path/'*.jpg'))]
+        fs = gcsfs.GCSFileSystem(project=project,
+                                 token=credentials)
+
+        img_fps = [(get_im_size, (fs, fp)) for fp in fs.glob(str(imgs_path/'*.jpg'))]
         # create queues
         task_queue = multiprocessing.Queue()
         done_queue = multiprocessing.Queue()
@@ -95,21 +97,22 @@ def main():
         for i in range(pool_size):
             multiprocessing.Process(target=worker, args=(task_queue, done_queue)).start()
         print('starting worker processes complete')
-        # read annotations into dask distributed dataframe
-        annotations_fp = 'gcs://' + annotations_fp
-        df = dd.read_csv(annotations_fp, storage_options={'token': fs.session.credentials}, blocksize=25e6)
-        # precompute group annotations by image id
-        groups = df.groupby('ImageID').compute().groups # groups of indexes
-        print('number of annotation groups found: ', len(groups.keys()))
-
-        # # read annotations
-        # with fs(**fs_args).open(annotations_fp) as f:
-        #     reader = pd.read_csv(f, chunksize=100000)
-        #     df = pd.concat([chunk for chunk in reader])
+        # # read annotations into dask distributed dataframe
+        # with fs.open(annotations_fp) as f:
+        #     ddf = dd.read_csv(f, storage_options={'token': fs.session.credentials}, blocksize=25e6)
         #     print('read annotations complete')
         # # precompute group annotations by image id
-        # groups = df.groupby('ImageID').groups # groups of indexes
+        # groups = ddf.groupby('ImageID').compute().groups # groups of indexes
         # print('number of annotation groups found: ', len(groups.keys()))
+
+        # read annotations
+        with fs.open(annotations_fp) as f:
+            reader = pd.read_csv(f, chunksize=100000)
+            df = pd.concat([chunk for chunk in reader])
+            print('read annotations complete')
+        # precompute group annotations by image id
+        groups = df.groupby('ImageID').groups # groups of indexes
+        print('number of annotation groups found: ', len(groups.keys()))
 
         # get results  and convert annotations
         print('unordered results:')
@@ -119,7 +122,7 @@ def main():
 
             width, height = image['width'], image['height']
             # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
-            anno = df.loc[groups[filepath.stem]].compute()
+            anno = df.loc[groups[filepath.stem]]
             anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
             anno['iscrowd'] = anno.IsGroupOf
             anno['category_id'] = anno.LabelName
@@ -135,7 +138,7 @@ def main():
         for i in range(pool_size):
             task_queue.put('STOP')
 
-        with fs(**fs_args).open(labels_fp) as f:
+        with fs.open(labels_fp) as f:
             labels = pd.read_csv(f)
         labels['supercategory'] = labels.Class
         labels['name'] = labels.Class
