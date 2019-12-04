@@ -27,6 +27,7 @@ if __name__ == '__main__':
     # with fs.open(FILE_PATH) as f:
         # reader = pd.read_csv(f, chunksize=100000)
         # df = pd.concat([chunk for chunk in reader])
+    # read with dask
     FILE_PATH = 'gcs://' + FILE_PATH
     df = dd.read_csv(FILE_PATH, storage_options={'token': fs.session.credentials}, blocksize=25e6)
     print("Num rows: ", df.compute().shape[0])
