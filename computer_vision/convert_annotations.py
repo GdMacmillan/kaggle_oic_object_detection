@@ -36,9 +36,9 @@ def get_image_metadata(func, args):
         "width": width,
         "id": filepath.stem,
     }
-    # return image
-    return '%s is processing image: %s' % \
-        (multiprocessing.current_process().name, image)
+    return image
+    # return '%s is processing image: %s' % \
+    #     (multiprocessing.current_process().name, image)
 
 def get_im_size(fs, fp):
     """
@@ -114,8 +114,8 @@ def main():
         # get results  and convert annotations
         print('unordered results:')
         for i in range(len(img_fps)):
-            print('\t', done_queue.get())
-            # image = done_queue.get()
+            # print('\t', done_queue.get())
+            image = done_queue.get()
 
             width, height = image['width'], image['height']
             # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
