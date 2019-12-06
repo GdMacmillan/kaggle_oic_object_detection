@@ -7,6 +7,7 @@ from pathlib import Path
 import dask.dataframe as dd
 import pandas as pd
 import numpy as np
+import concurrent.futures
 import multiprocessing
 import gcsfs
 import os
@@ -86,17 +87,6 @@ def main():
         fs = gcsfs.GCSFileSystem(project=project,
                                  token=credentials)
 
-        img_fps = [(get_im_size, (fs, fp)) for fp in fs.glob(str(imgs_path/'*.jpg'))]
-        # create queues
-        task_queue = multiprocessing.Queue()
-        done_queue = multiprocessing.Queue()
-        # submit tasks
-        for task in img_fps: # TASKS1
-            task_queue.put(task)
-
-        for i in range(pool_size):
-            multiprocessing.Process(target=worker, args=(task_queue, done_queue)).start()
-        print('starting worker processes complete')
         # # read annotations into dask distributed dataframe
         # with fs.open(annotations_fp) as f:
         #     ddf = dd.read_csv(f, storage_options={'token': fs.session.credentials}, blocksize=25e6)
@@ -114,29 +104,29 @@ def main():
         groups = df.groupby('ImageID').groups # groups of indexes
         print('number of annotation groups found: ', len(groups.keys()))
 
-        # get results  and convert annotations
-        print('unordered results:')
-        for i in range(len(img_fps)):
-            # print('\t', done_queue.get())
-            image = done_queue.get()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Start the load operations and mark each future with its filepath
+            future_to_fp = {executor.submit(get_im_size, fs, fp): fp for fp in fs.glob(str(imgs_path/'*.jpg'))}
+            for future in concurrent.futures.as_completed(future_to_fp):
+                fp = future_to_fp[future]
+                try:
+                    image = future.result()
+                except Exception as exc:
+                    print('%r generated an exception: %s' % (fp, exc))
+                else:
+                    width, height = image['width'], image['height']
+                    # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
+                    anno = df.loc[groups[filepath.stem]]
+                    anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
+                    anno['iscrowd'] = anno.IsGroupOf
+                    anno['category_id'] = anno.LabelName
+                    anno['image_id'] = anno.ImageID
+                    anno['id'] = anno.key_0
+                    anno['segmentation'] = np.empty((len(anno), 0)).tolist()
+                    annotations = anno[fields].to_dict('records')
 
-            width, height = image['width'], image['height']
-            # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
-            anno = df.loc[groups[filepath.stem]]
-            anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
-            anno['iscrowd'] = anno.IsGroupOf
-            anno['category_id'] = anno.LabelName
-            anno['image_id'] = anno.ImageID
-            anno['id'] = anno.key_0
-            anno['segmentation'] = np.empty((len(anno), 0)).tolist()
-            annotations = anno[fields].to_dict('records')
-
-            output_dict['images'].append(image)
-            output_dict['annotations'].extend(annotations)
-
-        # Tell child processes to stop
-        for i in range(pool_size):
-            task_queue.put('STOP')
+                    output_dict['images'].append(image)
+                    output_dict['annotations'].extend(annotations)
 
         with fs.open(labels_fp) as f:
             labels = pd.read_csv(f)
