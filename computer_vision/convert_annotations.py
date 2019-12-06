@@ -95,26 +95,27 @@ def main():
                     width, height = future.result()
                 except Exception as exc:
                     print('%r generated an exception: %s' % (fp, exc))
+                else:
+                    print('read image %r' % fp)
+                    filepath = Path(fp)
+                    image = {
+                        "file_name": filepath.name,
+                        "height": height,
+                        "width": width,
+                        "id": filepath.stem,
+                    }
+                    # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
+                    anno = df.loc[groups[filepath.stem]]
+                    anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
+                    anno['iscrowd'] = anno.IsGroupOf
+                    anno['category_id'] = anno.LabelName
+                    anno['image_id'] = anno.ImageID
+                    anno['id'] = anno.key_0
+                    anno['segmentation'] = np.empty((len(anno), 0)).tolist()
+                    annotations = anno[fields].to_dict('records')
 
-                filepath = Path(fp)
-                image = {
-                    "file_name": filepath.name,
-                    "height": height,
-                    "width": width,
-                    "id": filepath.stem,
-                }
-                # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
-                anno = df.loc[groups[filepath.stem]]
-                anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
-                anno['iscrowd'] = anno.IsGroupOf
-                anno['category_id'] = anno.LabelName
-                anno['image_id'] = anno.ImageID
-                anno['id'] = anno.key_0
-                anno['segmentation'] = np.empty((len(anno), 0)).tolist()
-                annotations = anno[fields].to_dict('records')
-
-                output_dict['images'].append(image)
-                output_dict['annotations'].extend(annotations)
+                    output_dict['images'].append(image)
+                    output_dict['annotations'].extend(annotations)
 
         with fs.open(labels_fp) as f:
             labels = pd.read_csv(f, names=["Class"], index_col=0)
