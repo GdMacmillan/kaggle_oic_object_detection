@@ -23,24 +23,6 @@ manager = multiprocessing.Manager()
 
 fields = ['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id']
 
-def worker(input, output):
-    for func, args in iter(input.get, 'STOP'):
-        result = get_image_metadata(func, args)
-        output.put(result)
-
-def get_image_metadata(func, args):
-    width, height = func(*args)
-    filepath = Path(args[1])
-    image = {
-        "file_name": filepath.name,
-        "height": height,
-        "width": width,
-        "id": filepath.stem,
-    }
-    return image
-    # return '%s is processing image: %s' % \
-    #     (multiprocessing.current_process().name, image)
-
 def get_im_size(fs, fp):
     """
     input - filepath or path object
@@ -113,20 +95,26 @@ def main():
                     image = future.result()
                 except Exception as exc:
                     print('%r generated an exception: %s' % (fp, exc))
-                else:
-                    width, height = image['width'], image['height']
-                    # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
-                    anno = df.loc[groups[filepath.stem]]
-                    anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
-                    anno['iscrowd'] = anno.IsGroupOf
-                    anno['category_id'] = anno.LabelName
-                    anno['image_id'] = anno.ImageID
-                    anno['id'] = anno.key_0
-                    anno['segmentation'] = np.empty((len(anno), 0)).tolist()
-                    annotations = anno[fields].to_dict('records')
 
-                    output_dict['images'].append(image)
-                    output_dict['annotations'].extend(annotations)
+                filepath = Path(fp)
+                image = {
+                    "file_name": filepath.name,
+                    "height": height,
+                    "width": width,
+                    "id": filepath.stem,
+                }
+                # anno = ddf.loc[groups[filepath.stem]].compute() # dask distributed
+                anno = df.loc[groups[filepath.stem]]
+                anno = anno.merge(anno.apply(calc_bounding_box, args=(width, height), axis=1), on=anno.index, validate='one_to_one')
+                anno['iscrowd'] = anno.IsGroupOf
+                anno['category_id'] = anno.LabelName
+                anno['image_id'] = anno.ImageID
+                anno['id'] = anno.key_0
+                anno['segmentation'] = np.empty((len(anno), 0)).tolist()
+                annotations = anno[fields].to_dict('records')
+
+                output_dict['images'].append(image)
+                output_dict['annotations'].extend(annotations)
 
         with fs.open(labels_fp) as f:
             labels = pd.read_csv(f)
