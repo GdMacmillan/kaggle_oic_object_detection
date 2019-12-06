@@ -96,7 +96,6 @@ def main():
                 except Exception as exc:
                     print('%r generated an exception: %s' % (fp, exc))
                 else:
-                    print('read image %r' % fp)
                     filepath = Path(fp)
                     image = {
                         "file_name": filepath.name,
@@ -113,7 +112,7 @@ def main():
                     anno['id'] = anno.key_0
                     anno['segmentation'] = np.empty((len(anno), 0)).tolist()
                     annotations = anno[fields].to_dict('records')
-
+                    print(annotations)
                     output_dict['images'].append(image)
                     output_dict['annotations'].extend(annotations)
 
