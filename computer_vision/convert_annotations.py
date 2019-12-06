@@ -117,7 +117,7 @@ def main():
                 output_dict['annotations'].extend(annotations)
 
         with fs.open(labels_fp) as f:
-            labels = pd.read_csv(f)
+            labels = pd.read_csv(f, names=["Class"], index_col=0)
         labels['supercategory'] = labels.Class
         labels['name'] = labels.Class
         labels['id'] = labels.index
