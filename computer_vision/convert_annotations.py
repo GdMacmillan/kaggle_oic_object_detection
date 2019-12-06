@@ -92,7 +92,7 @@ def main():
             for future in concurrent.futures.as_completed(future_to_fp):
                 fp = future_to_fp[future]
                 try:
-                    image = future.result()
+                    width, height = future.result()
                 except Exception as exc:
                     print('%r generated an exception: %s' % (fp, exc))
 
