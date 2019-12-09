@@ -14,6 +14,7 @@ import os
 import io
 import json
 import tarfile
+import shutil
 import time
 
 file_name = os.path.basename(__file__).split('.')[0]
@@ -41,12 +42,17 @@ def write_main(fs, remote_fp, data):
         fp filepath or path object
         data object
     output - bool
+    ref: https://stackoverflow.com/questions/39109180/dumping-json-directly-into-a-tarfile
     """
     tmp_file = NamedTemporaryFile()
     filename = tmp_file.name
-    with BytesIO() as out_stream, tarfile.open(filename, 'w|gz', out_stream) as tar_file:
-        for packet in data:
-            out_stream.write(dumps(packet).encode())
+    with io.BytesIO() as out_stream, tarfile.open(filename, 'w|gz') as tar_file:
+        out_stream.write(json.dumps(data).encode())
+        out_stream.seek(0)
+        info = tarfile.TarInfo("data")
+        info.size = len(out_stream.getbuffer())
+        tar_file.addfile(info, out_stream)
+
     fs.put(filename, remote_fp)
 
 def calc_bounding_box(row, im_width, im_height):
@@ -82,6 +88,7 @@ def main():
     imgs_path = Path(read_bucket_name)
     annotations_fp = os.path.join(read_bucket_name, input_file_name)
     labels_fp = os.path.join(read_bucket_name, labels_file_name)
+    output_fp = os.path.join(read_bucket_name, output_file_name)
     # create filesystem object to handle our credentials
     fs = gcsfs.GCSFileSystem(project=project,
                              token=credentials)
