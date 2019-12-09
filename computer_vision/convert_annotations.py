@@ -147,8 +147,9 @@ def main():
     labels['id'] = labels.index
 
     output_dict['categories'].extend(labels.to_dict('records'))
-    print('initiating main up;pad')
-    write_main(fs, output_file_name, output_dict)
+    print('initiating main upload')
+    write_main(fs, output_fp, output_dict)
+    print('output file upload complete')
     # send(out.name)
     end = time.time()
 
