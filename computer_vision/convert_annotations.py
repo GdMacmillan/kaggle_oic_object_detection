@@ -136,7 +136,7 @@ def main():
                 anno['id'] = anno.key_0
                 anno['segmentation'] = np.empty((len(anno), 0)).tolist()
                 annotations = anno[fields].to_dict('records')
-                print(annotations)
+
                 output_dict['images'].append(image)
                 output_dict['annotations'].extend(annotations)
 
@@ -147,6 +147,7 @@ def main():
     labels['id'] = labels.index
 
     output_dict['categories'].extend(labels.to_dict('records'))
+    print('initiating main up;pad')
     write_main(fs, output_file_name, output_dict)
     # send(out.name)
     end = time.time()
