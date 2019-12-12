@@ -4,7 +4,6 @@ from PIL import Image
 from collections import defaultdict
 from tempfile import NamedTemporaryFile
 from pathlib import Path
-import dask.dataframe as dd
 import pandas as pd
 import numpy as np
 import concurrent.futures
@@ -92,15 +91,6 @@ def main():
     # create filesystem object to handle our credentials
     fs = gcsfs.GCSFileSystem(project=project,
                              token=credentials)
-
-    # # read annotations into dask distributed dataframe
-    # with fs.open(annotations_fp) as f:
-    #     ddf = dd.read_csv(f, storage_options={'token': fs.session.credentials}, blocksize=25e6)
-    #     print('read annotations complete')
-    # # precompute group annotations by image id
-    # groups = ddf.groupby('ImageID').compute().groups # groups of indexes
-    # print('number of annotation groups found: ', len(groups.keys()))
-
     # read annotations
     with fs.open(annotations_fp) as f:
         reader = pd.read_csv(f, chunksize=100000)
